@@ -1,71 +1,66 @@
 const express = require('express');
-const app = express();
+const pool = require('./config/db'); // Importar conexión
+require('dotenv').config();
 
-// Middleware para parsear JSON
+const app = express();
 app.use(express.json());
 
-// Arreglo en memoria para simular base de datos de productos
-let productos = [
-    { id: 1, nombre: 'Laptop', precio: 15000 },
-    { id: 2, nombre: 'Teclado', precio: 800 }
-];
-
-// Ruta base
-app.get('/', (req, res) => {
-    res.send('El servidor esta en linea');
-});
-
-// GET Obtener todos los recursos
-app.get('/api/recursos', (req, res) => {
-    res.json(productos);
-});
-
-// GET Obtener recurso por id
-app.get('/api/recursos/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const producto = productos.find(p => p.id === id);
-    if (!producto) {
-        return res.status(404).json({ mensaje: 'No encontrado' });
+// GET: Obtener todos
+app.get('/api/recursos', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM productos');
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: 'Error al obtener los datos' });
     }
-    res.json(producto);
 });
 
-// POST Crear nuevo recurso
-app.post('/api/recursos', (req, res) => {
-    const nuevoId = productos.length > 0 ? productos[productos.length - 1].id + 1 : 1;
-    const nuevoProducto = {
-        id: nuevoId,
-        nombre: req.body.nombre,
-        precio: req.body.precio
-    };
-    productos.push(nuevoProducto);
-    res.status(201).json(nuevoProducto);
-});
-
-// PUT Actualizar recurso
-app.put('/api/recursos/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const producto = productos.find(p => p.id === id);
-    if (!producto) {
-        return res.status(404).json({ mensaje: 'No encontrado' });
+// GET: Obtener por ID
+app.get('/api/recursos/:id', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM productos WHERE id = ?', [req.params.id]);
+        if (rows.length === 0) return res.status(404).json({ mensaje: 'No encontrado' });
+        res.json(rows[0]);
+    } catch (error) {
+        res.status(500).json({ error: 'Error en la base de datos' });
     }
-    producto.nombre = req.body.nombre || producto.nombre;
-    producto.precio = req.body.precio || producto.precio;
-    res.json(producto);
 });
 
-// DELETE Eliminar recurso
-app.delete('/api/recursos/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const index = productos.findIndex(p => p.id === id);
-    if (index === -1) {
-        return res.status(404).json({ mensaje: 'No encontrado' });
+// POST: Crear nuevo
+app.post('/api/recursos', async (req, res) => {
+    try {
+        const { nombre, precio } = req.body;
+        const [result] = await pool.query('INSERT INTO productos (nombre, precio) VALUES (?, ?)', [nombre, precio]);
+        res.status(201).json({ id: result.insertId, nombre, precio });
+    } catch (error) {
+        res.status(500).json({ error: 'Error al insertar el dato' });
     }
-    productos.splice(index, 1);
-    res.json({ mensaje: 'Eliminado correctamente' });
 });
 
-// Levantar el servidor
-app.listen(3000, () => {
-    console.log('Servidor en puerto 3000');
+// PUT: Actualizar
+app.put('/api/recursos/:id', async (req, res) => {
+    try {
+        const { nombre, precio } = req.body;
+        const [result] = await pool.query('UPDATE productos SET nombre = ?, precio = ? WHERE id = ?', [nombre, precio, req.params.id]);
+        if (result.affectedRows === 0) return res.status(404).json({ mensaje: 'No encontrado' });
+        res.json({ id: req.params.id, nombre, precio });
+    } catch (error) {
+        res.status(500).json({ error: 'Error al actualizar' });
+    }
+});
+
+// DELETE: Eliminar
+app.delete('/api/recursos/:id', async (req, res) => {
+    try {
+        const [result] = await pool.query('DELETE FROM productos WHERE id = ?', [req.params.id]);
+        if (result.affectedRows === 0) return res.status(404).json({ mensaje: 'No encontrado' });
+        res.json({ mensaje: 'Eliminado correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error al eliminar' });
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Servidor en puerto ${PORT}`);
 });
